@@ -1,0 +1,13 @@
+CREATE TABLE users (
+    id UUID PRIMARY KEY,
+    full_name VARCHAR(100) NOT NULL,
+    email VARCHAR(254) NOT NULL UNIQUE,
+    password VARCHAR(60) NOT NULL,
+    profile_image_url VARCHAR(2048),
+    bio VARCHAR(500),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    role VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    CONSTRAINT chk_users_role CHECK (role IN ('ADMIN', 'MANAGER', 'MEMBER'))
+);
