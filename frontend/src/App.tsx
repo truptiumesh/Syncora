@@ -4,6 +4,8 @@ import { LoginPage } from './pages/LoginPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { ProjectDetailsPage } from './pages/ProjectDetailsPage'
 import { ProjectListPage } from './pages/ProjectListPage'
+import { TaskDetailsPage } from './pages/TaskDetailsPage'
+import { TaskListPage } from './pages/TaskListPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { WorkspaceDetailsPage } from './pages/WorkspaceDetailsPage'
 import { WorkspaceListPage } from './pages/WorkspaceListPage'
@@ -30,6 +32,8 @@ export function AppRoutes() {
       <Route path="/workspaces/:workspaceId" element={<ProtectedRoute><WorkspaceDetailsPage /></ProtectedRoute>} />
       <Route path="/workspaces/:workspaceId/projects" element={<ProtectedRoute><ProjectListPage /></ProtectedRoute>} />
       <Route path="/projects/:projectId" element={<ProtectedRoute><ProjectDetailsPage /></ProtectedRoute>} />
+      <Route path="/projects/:projectId/tasks" element={<ProtectedRoute><TaskListPage /></ProtectedRoute>} />
+      <Route path="/tasks/:taskId" element={<ProtectedRoute><TaskDetailsPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   )

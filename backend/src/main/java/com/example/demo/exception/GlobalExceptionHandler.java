@@ -5,6 +5,8 @@ import com.example.demo.exception.LastProjectManagerException;
 import com.example.demo.exception.ProjectMemberExistsException;
 import com.example.demo.exception.ProjectMemberNotFoundException;
 import com.example.demo.exception.ProjectNotFoundException;
+import com.example.demo.exception.TaskCommentNotFoundException;
+import com.example.demo.exception.TaskNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.Map;
@@ -47,7 +49,9 @@ public class GlobalExceptionHandler {
 			WorkspaceNotFoundException.class,
 			WorkspaceMemberNotFoundException.class,
 			ProjectNotFoundException.class,
-			ProjectMemberNotFoundException.class
+			ProjectMemberNotFoundException.class,
+			TaskNotFoundException.class,
+			TaskCommentNotFoundException.class
 	})
 	public ResponseEntity<ApiErrorResponse> handleWorkspaceResourceNotFound(
 			RuntimeException exception, HttpServletRequest request) {
@@ -74,6 +78,12 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(IllegalArgumentException.class)
 	public ResponseEntity<ApiErrorResponse> handleBadRequest(
 			IllegalArgumentException exception, HttpServletRequest request) {
+		return error(HttpStatus.BAD_REQUEST, exception.getMessage(), request, Map.of());
+	}
+
+	@ExceptionHandler(InvalidTaskAssigneeException.class)
+	public ResponseEntity<ApiErrorResponse> handleInvalidTaskAssignee(
+			InvalidTaskAssigneeException exception, HttpServletRequest request) {
 		return error(HttpStatus.BAD_REQUEST, exception.getMessage(), request, Map.of());
 	}
 

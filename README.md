@@ -1,6 +1,6 @@
 # SYNCORA
 
-SYNCORA is a collaboration platform built with a Spring Boot backend and a React + TypeScript frontend. Modules 1 through 3 implement account authentication, workspace/team management, and project management.
+SYNCORA is a collaboration platform built with a Spring Boot backend and a React + TypeScript frontend. Modules 1 through 4 implement account authentication, workspace/team management, projects, and project tasks.
 
 ## Requirements
 
@@ -19,7 +19,7 @@ docker compose ps
 
 The database listens on `localhost:5433` and uses the existing development database `syncora_db`. Credentials are configured in `docker-compose.yml`; do not reuse these development values in production.
 
-On backend startup, Flyway applies pending migrations (`V1__create_users.sql`, `V2__create_workspaces.sql`, and `V3__create_projects.sql`). Hibernate remains configured with `ddl-auto=validate`, so it checks the migrated schema and does not create or update tables.
+On backend startup, Flyway applies pending migrations (`V1__create_users.sql` through `V4__create_tasks_and_task_comments.sql`). Hibernate remains configured with `ddl-auto=validate`, so it checks the migrated schema and does not create or update tables.
 
 ## Backend
 
@@ -77,20 +77,20 @@ The frontend keeps the access token only in JavaScript memory and does not use l
 ```text
 java/com/example/demo/
 ├── config/       Security and CORS configuration
-├── controller/   Authentication, user, workspace, project, and member controllers
+├── controller/   Authentication, user, workspace, project, task, and comment controllers
 ├── dto/
-│   ├── request/  Authentication, profile, workspace, and project requests
-│   └── response/ Authentication, user, workspace, project, and API error responses
-├── entity/       User, Workspace, WorkspaceMember, Project, ProjectMember
-├── enums/        Global, workspace, and project roles/statuses
+│   ├── request/  Validated authentication, workspace, project, task, and comment requests
+│   └── response/ Typed authentication, user, workspace, project, task, and API error responses
+├── entity/       User, Workspace, WorkspaceMember, Project, ProjectMember, Task, TaskComment
+├── enums/        Global/workspace/project roles and project/task statuses and priorities
 ├── exception/    Domain exceptions and centralized API error handling
-├── repository/   User, workspace, and project repositories
+├── repository/   User, workspace, project, task, and comment repositories
 ├── security/     JWT filter/service, user details, BCrypt password policy
-└── service/      Authentication, user, workspace, project, and authorization services
+└── service/      Authentication, user, workspace, project, task, comment, and authorization services
 
 resources/
 ├── application.properties
-└── db/migration/V1__create_users.sql, V2__create_workspaces.sql, and V3__create_projects.sql
+└── db/migration/V1__create_users.sql through V4__create_tasks_and_task_comments.sql
 ```
 
 ### Frontend (`frontend/src`)
@@ -100,13 +100,13 @@ src/
 ├── api/          Axios client and in-memory access-token attachment
 ├── auth/         Authentication context
 ├── components/   Shared forms, authentication layout, and workspace header
-├── pages/        Login, registration, profile, workspace, and project pages
-├── services/     Typed authentication, user, workspace, and project API calls
+├── pages/        Login, registration, profile, workspace, project, and task pages
+├── services/     Typed authentication, user, workspace, project, and task API calls
 ├── test/         Test setup
-├── types/        Authentication, workspace, and project API types
+├── types/        Authentication, workspace, project, task, and comment API types
 ├── utils/        API error-message handling
 ├── App.tsx       Routes and protected-route behavior
-├── App.test.tsx, WorkspacePages.test.tsx, ProjectPages.test.tsx
+├── App.test.tsx, WorkspacePages.test.tsx, ProjectPages.test.tsx, TaskPages.test.tsx
 └── main.tsx      React entry point
 ```
 
@@ -119,13 +119,15 @@ Flyway creates:
 - `workspace_members`: UUID keys to the workspace and user, workspace role, and joined timestamp. A unique constraint prevents duplicate memberships; deleting a workspace cascades to its memberships.
 - `projects`: UUID primary key, workspace and creator foreign keys, workspace-unique project key, status, optional dates, timestamps, and archive timestamp. Deleting a workspace cascades to its projects.
 - `project_members`: UUID key, project/workspace/user relationships, project role, and joined timestamp. Membership is unique per project/user; composite foreign keys ensure a project member is a member of that project's workspace. Deleting a project or workspace membership cascades to the project membership.
+- `tasks`: UUID key, project and user relationships, server-generated key unique within its project, status, priority, optional assignee and due date, and lifecycle timestamps. Deleting a project cascades to its tasks; removing an assigned project member clears the task assignee.
+- `task_comments`: UUID key, task and author relationships, content, and timestamps. Deleting a task cascades to its comments.
 - `flyway_schema_history`: Flyway's migration tracking table.
 
 Indexes support owner and membership queries. The database is not reset when tests run. Hibernate only validates the schema after Flyway migrations.
 
 ## Verification
 
-The backend tests use the configured PostgreSQL database and cover Module 1 authentication, Flyway V1-V3, workspace authorization, project creation and keys, project membership, role rules, lifecycle, filters, pagination, and deletion. Frontend tests cover authentication, workspaces, project listing/creation/filtering/details/member management, and loading/error states. Run both suites with the commands above.
+The backend tests use the configured PostgreSQL database and cover Module 1 authentication, Flyway V1-V4, workspace authorization, project management, and task/comment authorization and lifecycle. Frontend tests cover authentication, workspaces, projects, tasks, comments, and loading/error states. Run both suites with the commands above.
 
 ## Current scope and limitations
 
@@ -133,6 +135,7 @@ The backend tests use the configured PostgreSQL database and cover Module 1 auth
 - Tokens are not persisted across browser reloads.
 - Profile images are supplied as a URL; file upload is not implemented.
 - Account recovery, email verification, and global role administration are not part of this module.
+- Tasks do not include notifications, real-time collaboration, file uploads, or task-specific custom fields.
 
 ## Module 2: Workspaces and teams
 
@@ -223,4 +226,42 @@ npm test
 npm run build
 ```
 
-Tasks, project invitations by email, custom project-key editing, project transfer, and restoring a prior pre-archive status are outside Module 3. Restoring an archived project sets its status to ACTIVE.
+Project invitations by email, custom project-key editing, project transfer, and restoring a prior pre-archive status are outside Module 3. Restoring an archived project sets its status to ACTIVE.
+
+## Module 4: Tasks and comments
+
+Flyway migration `V4__create_tasks_and_task_comments.sql` creates `tasks` and `task_comments`, including foreign keys, status/priority/content checks, project-scoped task-key uniqueness, and indexes for project listing, filtering, sorting, assignees, due dates, and comments. V1-V3 remain unchanged, and Hibernate stays in `validate` mode.
+
+Every task and comment endpoint requires a valid bearer JWT:
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `POST` | `/api/v1/projects/{projectId}/tasks` | Create a task; the API generates its task key and derives its creator from the authenticated user |
+| `GET` | `/api/v1/projects/{projectId}/tasks` | Paginated list; supports `search`, `status`, `priority`, `assigneeId`, `overdue`, `page`, `size`, `sortBy`, and `sortDirection` |
+| `GET` | `/api/v1/tasks/{taskId}` | Read task details |
+| `PUT` | `/api/v1/tasks/{taskId}` | Update title, description, and due date |
+| `PATCH` | `/api/v1/tasks/{taskId}/status` | Change status; entering DONE records completion time |
+| `PATCH` | `/api/v1/tasks/{taskId}/priority` | Change priority |
+| `PATCH` | `/api/v1/tasks/{taskId}/assignee` | Assign or unassign an existing project member |
+| `DELETE` | `/api/v1/tasks/{taskId}` | Delete a task and its comments (project manager or workspace OWNER/ADMIN) |
+| `GET` | `/api/v1/tasks/{taskId}/comments` | List task comments |
+| `POST` | `/api/v1/tasks/{taskId}/comments` | Add a comment; author is the authenticated user |
+| `PUT` | `/api/v1/tasks/{taskId}/comments/{commentId}` | Edit an own comment or moderate as an authorized manager |
+| `DELETE` | `/api/v1/tasks/{taskId}/comments/{commentId}` | Delete an own comment or moderate as an authorized manager |
+
+Services authorize operations through the existing project and workspace membership rules. Workspace OWNER/ADMIN and project members can access project tasks; assignment is restricted to active project members. Project roles do not replace global roles. Task keys are allocated while locking their project, with database uniqueness as a final safeguard. Mutations are rejected for archived projects.
+
+The project details page links to the protected task list at `/projects/:projectId/tasks`; task details and comments are at `/tasks/:taskId`. The UI includes task creation, search and filters, sorting, pagination, assignee/status/priority controls, overdue indicators, and comment editing/deletion controls. The API remains authoritative for all permissions.
+
+Verify from PowerShell in the corresponding directories:
+
+```powershell
+cd backend
+.\gradlew.bat clean test
+.\gradlew.bat build
+cd ..\frontend
+npm test
+npm run build
+```
+
+Start the backend with `cd backend; .\gradlew.bat bootRun` after setting `JWT_SECRET`. In another terminal, start the frontend with `cd frontend; npm run dev`.

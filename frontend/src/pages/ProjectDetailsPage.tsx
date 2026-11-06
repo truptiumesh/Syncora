@@ -209,6 +209,7 @@ export function ProjectDetailsPage() {
                   <span><strong>Members</strong>{members.length}</span>
                   <span><strong>Your role</strong>{project.currentUserRole || workspace.currentUserRole}</span>
                 </div>
+                <Link className="button-outline project-tasks-link" to={`/projects/${project.id}/tasks`}>View project tasks →</Link>
               </>
             )}
           </div>
