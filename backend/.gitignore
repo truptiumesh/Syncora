@@ -35,13 +35,3 @@ out/
 
 ### VS Code ###
 .vscode/
-
-# Local uploads and application data
-var/
-**/var/
-uploads/
-
-# Database backups
-*.dump
-*.backup
-*.bak
