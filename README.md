@@ -55,7 +55,9 @@ The backend separates controllers, services, repositories, entities, DTOs, secur
 
 ## Screenshots
 
-Screenshots of the dashboard, workspace, projects, task management, chat, and calendar will be added here.
+### Dashboard
+
+![SYNCORA Dashboard](docs/screenshots/dashboard.png)
 
 ## Requirements
 
