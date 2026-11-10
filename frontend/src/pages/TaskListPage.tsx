@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { WorkspaceHeader } from '../components/WorkspaceHeader'
 import { projectApi } from '../services/projectService'
@@ -13,6 +13,7 @@ const taskPriorities: TaskPriority[] = ['LOW', 'MEDIUM', 'HIGH', 'URGENT']
 
 export function TaskListPage() {
   const { projectId = '' } = useParams()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const [project, setProject] = useState<ProjectResponse | null>(null)
   const [members, setMembers] = useState<ProjectMemberResponse[]>([])
@@ -28,7 +29,7 @@ export function TaskListPage() {
   const [loadingProject, setLoadingProject] = useState(true)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [showCreate, setShowCreate] = useState(false)
+  const [showCreate, setShowCreate] = useState(searchParams.get('create') === 'true')
   const [creating, setCreating] = useState(false)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')

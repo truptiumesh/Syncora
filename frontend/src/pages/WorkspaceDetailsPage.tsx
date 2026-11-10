@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { FormField } from '../components/FormField'
+import { FileManager } from '../components/FileManager'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { WorkspaceHeader } from '../components/WorkspaceHeader'
 import { workspaceApi } from '../services/workspaceService'
@@ -181,6 +182,17 @@ export function WorkspaceDetailsPage() {
           </div>
           <Link className="button-primary" to={`/workspaces/${workspaceId}/projects`}>Browse projects <span aria-hidden="true">→</span></Link>
         </section>
+
+        <section className="workspace-projects-callout workspace-messages-callout">
+          <div>
+            <span className="eyebrow">PRIVATE TEAM CHAT</span>
+            <h2>One-to-one messages</h2>
+            <p>Start a persistent private conversation with any member of this workspace.</p>
+          </div>
+          <Link className="button-outline" to={`/workspaces/${workspaceId}/messages`}>Open messages <span aria-hidden="true">→</span></Link>
+        </section>
+
+        <FileManager workspaceId={workspaceId} canModerate={canManageWorkspace} />
 
         <div className="workspace-detail-heading">
           <div>

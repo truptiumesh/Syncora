@@ -29,6 +29,7 @@ public interface ProjectMemberRepository extends JpaRepository<ProjectMember, UU
 			select pm.project.id as projectId, pm.user.fullName as fullName
 			from ProjectMember pm
 			where pm.project.id in :projectIds and pm.role = :role
+			order by pm.project.id, pm.joinedAt, pm.id
 			""")
 	List<ManagerName> findManagerNames(
 			@Param("projectIds") Collection<UUID> projectIds,

@@ -39,3 +39,13 @@ Desktop.ini
 
 # Logs
 *.log
+
+# Local uploads and application data
+var/
+**/var/
+uploads/
+
+# Database backups
+*.dump
+*.backup
+*.bak

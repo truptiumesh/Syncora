@@ -7,6 +7,8 @@ import com.example.demo.entity.Project;
 import com.example.demo.entity.ProjectMember;
 import com.example.demo.entity.User;
 import com.example.demo.enums.ProjectRole;
+import com.example.demo.enums.ActivityType;
+import com.example.demo.enums.NotificationType;
 import com.example.demo.exception.LastProjectManagerException;
 import com.example.demo.exception.ProjectMemberExistsException;
 import com.example.demo.exception.ProjectMemberNotFoundException;
@@ -20,6 +22,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,18 +33,21 @@ public class ProjectMemberService {
 	private final WorkspaceMemberRepository workspaceMemberRepository;
 	private final UserRepository userRepository;
 	private final ProjectAuthorizationService authorizationService;
+	private final ApplicationEventPublisher eventPublisher;
 
 	public ProjectMemberService(
 			ProjectMemberRepository projectMemberRepository,
 			ProjectRepository projectRepository,
 			WorkspaceMemberRepository workspaceMemberRepository,
 			UserRepository userRepository,
-			ProjectAuthorizationService authorizationService) {
+			ProjectAuthorizationService authorizationService,
+			ApplicationEventPublisher eventPublisher) {
 		this.projectMemberRepository = projectMemberRepository;
 		this.projectRepository = projectRepository;
 		this.workspaceMemberRepository = workspaceMemberRepository;
 		this.userRepository = userRepository;
 		this.authorizationService = authorizationService;
+		this.eventPublisher = eventPublisher;
 	}
 
 	@Transactional(readOnly = true)
@@ -56,8 +62,9 @@ public class ProjectMemberService {
 	public ProjectMemberResponse add(
 			UUID projectId, String principalName, AddProjectMemberRequest request) {
 		projectRepository.findByIdForUpdate(projectId).orElseThrow(ProjectNotFoundException::new);
-		Project project = authorizationService
-				.requireProjectManagerOrWorkspaceAdmin(projectId, principalName).project();
+		ProjectAuthorizationService.Access access = authorizationService
+				.requireProjectManagerOrWorkspaceAdmin(projectId, principalName);
+		Project project = access.project();
 		User user = userRepository.findByEmail(request.email().trim().toLowerCase(Locale.ROOT))
 				.filter(User::isActive)
 				.orElseThrow(UserNotFoundException::new);
@@ -73,7 +80,23 @@ public class ProjectMemberService {
 		member.setProject(project);
 		member.setUser(user);
 		member.setRole(ProjectRole.MEMBER);
-		return ProjectMemberResponse.from(projectMemberRepository.save(member));
+		member = projectMemberRepository.saveAndFlush(member);
+		eventPublisher.publishEvent(ActivityEvent.create(
+				access.workspaceMember().getUser(),
+				ActivityType.PROJECT_MEMBER_ADDED,
+				access.workspaceMember().getUser().getFullName()
+						+ " added " + user.getFullName() + " to project " + project.getName() + ".",
+				project.getWorkspace().getId(),
+				project.getId(),
+				null,
+				null,
+				null,
+				List.of(new ActivityEvent.NotificationTarget(
+						user.getId(),
+						NotificationType.PROJECT_MEMBER_ADDED,
+						"Added to a project",
+						"You were added to project " + project.getName() + "."))));
+		return ProjectMemberResponse.from(member);
 	}
 
 	@Transactional

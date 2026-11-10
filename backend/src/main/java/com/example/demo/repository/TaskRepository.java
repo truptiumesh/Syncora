@@ -20,6 +20,8 @@ import org.springframework.data.repository.query.Param;
 public interface TaskRepository extends JpaRepository<Task, UUID> {
 	boolean existsByProject_IdAndTaskKey(UUID projectId, String taskKey);
 
+	Optional<Task> findByProject_IdAndTitle(UUID projectId, String title);
+
 	@EntityGraph(attributePaths = {"project", "assignee", "createdBy"})
 	Optional<Task> findById(UUID id);
 

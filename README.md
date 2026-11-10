@@ -1,6 +1,6 @@
 # SYNCORA
 
-SYNCORA is a collaboration platform built with a Spring Boot backend and a React + TypeScript frontend. Modules 1 through 4 implement account authentication, workspace/team management, projects, and project tasks.
+SYNCORA is a collaboration platform built with a Spring Boot backend and a React + TypeScript frontend. Modules 1 through 7 implement account authentication, workspaces/teams, projects, tasks/comments, real-time chat, notifications/activity, and file attachments. A personalized dashboard, activity navigation improvements, and one-to-one workspace messaging are also included.
 
 ## Requirements
 
@@ -19,7 +19,7 @@ docker compose ps
 
 The database listens on `localhost:5433` and uses the existing development database `syncora_db`. Credentials are configured in `docker-compose.yml`; do not reuse these development values in production.
 
-On backend startup, Flyway applies pending migrations (`V1__create_users.sql` through `V4__create_tasks_and_task_comments.sql`). Hibernate remains configured with `ddl-auto=validate`, so it checks the migrated schema and does not create or update tables.
+On backend startup, Flyway applies pending migrations (`V1__create_users.sql` through `V8__create_direct_messaging.sql`). Hibernate remains configured with `ddl-auto=validate`, so it checks the migrated schema and does not create or update tables.
 
 ## Backend
 
@@ -38,7 +38,11 @@ cd backend
 
 Set `JWT_SECRET` again in any new terminal before starting the application. The secret must be a Base64-encoded key of at least 256 bits. Gradle's `bootRun` and test tasks use UTC to avoid PostgreSQL timezone issues seen on this Windows development machine.
 
-The database defaults can be overridden with `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, and `SPRING_DATASOURCE_PASSWORD`. The default URL is `jdbc:postgresql://localhost:5433/syncora_db`. The local CORS origin defaults to `http://localhost:5173` and can be overridden using `CORS_ALLOWED_ORIGIN`.
+The database defaults can be overridden with `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, and `SPRING_DATASOURCE_PASSWORD`. The default URL is `jdbc:postgresql://localhost:5433/syncora_db`. Local CORS allows `http://localhost:5173` and `http://127.0.0.1:5173` by default. Configure `CORS_ALLOWED_ORIGINS` as a comma-separated allowlist for custom origins; the legacy single-origin `CORS_ALLOWED_ORIGIN` setting remains supported.
+
+Uploaded file contents are stored locally outside PostgreSQL. By default, the backend writes to `backend/var/syncora/uploads` when run from the backend directory. Set `SYNCORA_FILE_STORAGE_DIR` to an absolute directory on a persistent local disk to choose another location. The default per-file limit is 10 MB (`SYNCORA_MAX_FILE_SIZE`, for example `10MB`); the multipart request limit defaults to 11 MB (`SYNCORA_MAX_REQUEST_SIZE`) to leave room for multipart framing. The database stores metadata and an opaque UUID storage key, never a physical path.
+
+Optional demo data seeding is disabled by default and only runs with the `dev` Spring profile. To opt in, set `SPRING_PROFILES_ACTIVE=dev`, `SYNCORA_DEMO_SEED_ENABLED=true`, and `SYNCORA_DEMO_SEED_USER_EMAIL` to an existing active account's email. The seeder only adds a stable demo workspace, project, and sample task when they do not already exist. It does not create users, change existing records, or run in other profiles.
 
 ## Frontend
 
@@ -52,7 +56,7 @@ npm run build
 npm run dev
 ```
 
-Vite runs at `http://localhost:5173`. The frontend API base URL defaults to `http://localhost:8080`; set `VITE_API_BASE_URL` to override it.
+Vite runs at `http://localhost:5173`. In development, the frontend API base URL defaults to `http://localhost:8080`; set `VITE_API_BASE_URL` to the backend origin when it differs. In production, set this variable to the API origin, or leave it unset when the frontend and API are served from the same origin. The value is normalized to remove trailing slashes.
 
 ## Authentication and API
 
@@ -77,20 +81,20 @@ The frontend keeps the access token only in JavaScript memory and does not use l
 ```text
 java/com/example/demo/
 ├── config/       Security and CORS configuration
-├── controller/   Authentication, user, workspace, project, task, and comment controllers
+├── controller/   Authentication, user, workspace, project, task, comment, chat, direct message, notification, activity, and file controllers
 ├── dto/
-│   ├── request/  Validated authentication, workspace, project, task, and comment requests
-│   └── response/ Typed authentication, user, workspace, project, task, and API error responses
-├── entity/       User, Workspace, WorkspaceMember, Project, ProjectMember, Task, TaskComment
-├── enums/        Global/workspace/project roles and project/task statuses and priorities
+│   ├── request/  Validated authentication, workspace, project, task, comment, and chat requests
+│   └── response/ Typed authentication, user, workspace, project, task, chat, notification, activity, file, and error responses
+├── entity/       User, Workspace, WorkspaceMember, Project, ProjectMember, Task, TaskComment, ChatMessage, DirectConversation, DirectMessage, Notification, ActivityRecord, FileAttachment
+├── enums/        Roles, task/project states, notification types, and activity types
 ├── exception/    Domain exceptions and centralized API error handling
-├── repository/   User, workspace, project, task, and comment repositories
+├── repository/   User, workspace, project, task, comment, chat, notification, activity, and file repositories
 ├── security/     JWT filter/service, user details, BCrypt password policy
-└── service/      Authentication, user, workspace, project, task, comment, and authorization services
+└── service/      Authentication, workspace, project, task, chat, notification, activity, file storage, and authorization services
 
 resources/
 ├── application.properties
-└── db/migration/V1__create_users.sql through V4__create_tasks_and_task_comments.sql
+└── db/migration/V1__create_users.sql through V8__create_direct_messaging.sql
 ```
 
 ### Frontend (`frontend/src`)
@@ -99,14 +103,14 @@ resources/
 src/
 ├── api/          Axios client and in-memory access-token attachment
 ├── auth/         Authentication context
-├── components/   Shared forms, authentication layout, and workspace header
-├── pages/        Login, registration, profile, workspace, project, and task pages
-├── services/     Typed authentication, user, workspace, project, and task API calls
+├── components/   Shared forms, authentication layout, workspace header, notification bell, activity feed, and file manager
+├── pages/        Login, registration, dashboard, profile, workspace, project, task, chat, direct message, and activity pages
+├── services/     Typed authentication, workspace, project, task, chat, direct message, notification, and file API calls
 ├── test/         Test setup
-├── types/        Authentication, workspace, project, task, and comment API types
+├── types/        Authentication, workspace, project, task, comment, chat, direct message, notification, activity, and file API types
 ├── utils/        API error-message handling
 ├── App.tsx       Routes and protected-route behavior
-├── App.test.tsx, WorkspacePages.test.tsx, ProjectPages.test.tsx, TaskPages.test.tsx
+├── App.test.tsx, WorkspacePages.test.tsx, ProjectPages.test.tsx, TaskPages.test.tsx, ChatPage.test.tsx, NotificationActivity.test.tsx
 └── main.tsx      React entry point
 ```
 
@@ -121,13 +125,17 @@ Flyway creates:
 - `project_members`: UUID key, project/workspace/user relationships, project role, and joined timestamp. Membership is unique per project/user; composite foreign keys ensure a project member is a member of that project's workspace. Deleting a project or workspace membership cascades to the project membership.
 - `tasks`: UUID key, project and user relationships, server-generated key unique within its project, status, priority, optional assignee and due date, and lifecycle timestamps. Deleting a project cascades to its tasks; removing an assigned project member clears the task assignee.
 - `task_comments`: UUID key, task and author relationships, content, and timestamps. Deleting a task cascades to its comments.
+- `chat_messages`: UUID key, project and sender relationships, content, creation/update/edit/delete timestamps, and a project/chronology index. Messages are soft-deleted so their place in history remains visible.
+- `notifications`: recipient-owned records with optional actor and related workspace/project/task/comment/chat IDs, read state, event-level deduplication, and recipient/unread indexes.
+- `activity_records`: workspace-scoped event history with optional project/task context, actor, event-level deduplication, and chronological workspace/project indexes.
+- `file_attachments`: UUID metadata with sanitized original filename, opaque UUID storage key, server-detected content type, size, uploader, workspace, optional project, and upload time. Composite project/workspace foreign keys prevent associating an attachment with the wrong workspace. File bytes remain on the configured local filesystem.
 - `flyway_schema_history`: Flyway's migration tracking table.
 
 Indexes support owner and membership queries. The database is not reset when tests run. Hibernate only validates the schema after Flyway migrations.
 
 ## Verification
 
-The backend tests use the configured PostgreSQL database and cover Module 1 authentication, Flyway V1-V4, workspace authorization, project management, and task/comment authorization and lifecycle. Frontend tests cover authentication, workspaces, projects, tasks, comments, and loading/error states. Run both suites with the commands above.
+The backend tests use the configured PostgreSQL database and cover authentication, Flyway V1-V7, workspace/project authorization, tasks/comments, chat, notifications, activity, and file storage/access controls. Frontend tests cover authentication, workspaces, projects, tasks, chat, notification updates, activity pagination, file management, and loading/error states. Run both suites with the commands above.
 
 ## Current scope and limitations
 
@@ -135,7 +143,8 @@ The backend tests use the configured PostgreSQL database and cover Module 1 auth
 - Tokens are not persisted across browser reloads.
 - Profile images are supplied as a URL; file upload is not implemented.
 - Account recovery, email verification, and global role administration are not part of this module.
-- Tasks do not include notifications, real-time collaboration, file uploads, or task-specific custom fields.
+- Tasks do not include task-specific custom fields.
+- Project chat uses the in-process Spring simple broker; it is intended for a single application instance, not a multi-node deployment.
 
 ## Module 2: Workspaces and teams
 
@@ -265,3 +274,72 @@ npm run build
 ```
 
 Start the backend with `cd backend; .\gradlew.bat bootRun` after setting `JWT_SECRET`. In another terminal, start the frontend with `cd frontend; npm run dev`.
+
+## Module 5: Project chat
+
+Flyway migration `V5__create_chat_messages.sql` adds the project-scoped `chat_messages` table without changing V1-V4. It has project and sender foreign keys, content/soft-delete consistency validation, and indexes for chronological project history and sender lookups. Hibernate remains in `validate` mode.
+
+All chat routes require a bearer JWT and a workspace/project membership:
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/api/v1/projects/{projectId}/messages?page=0&size=50` | Paginated chronological chat history (maximum page size 100) |
+| `POST` | `/api/v1/projects/{projectId}/messages` | Send a message; sender identity is taken from the authenticated principal |
+| `PUT` | `/api/v1/messages/{messageId}` | Edit own message; project managers and workspace OWNER/ADMIN may moderate |
+| `DELETE` | `/api/v1/messages/{messageId}` | Soft-delete own message; project managers and workspace OWNER/ADMIN may moderate |
+
+The STOMP WebSocket endpoint is `/ws`. Clients include `Authorization: Bearer <JWT>` in the STOMP `CONNECT` headers, subscribe to `/topic/projects/{projectId}/messages`, and send to `/app/projects/{projectId}/messages`. The inbound interceptor authenticates the connection and verifies project access on each project-scoped subscription and send. Server-side message records are broadcast after their database transaction commits; client-supplied sender IDs and timestamps are ignored.
+
+The project details page links to the chat at `/projects/:projectId/chat`. It loads history over REST and merges it by message ID with confirmed STOMP updates, supports pagination, message editing and soft deletion, and cleans up the socket connection on navigation. The Spring simple broker is in-memory and suitable for one backend instance; multi-instance shared messaging is not included.
+
+## Module 6: Notifications and activity
+
+Flyway migration `V6__create_notifications_and_activity.sql` adds the notification and activity tables without changing V1-V5. Hibernate remains in `validate` mode.
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/api/v1/notifications?page=0&size=20` | Current user's notifications, newest first (maximum page size 100) |
+| `GET` | `/api/v1/notifications/unread-count` | Current user's unread count |
+| `PATCH` | `/api/v1/notifications/{notificationId}/read` | Mark an owned notification as read |
+| `PATCH` | `/api/v1/notifications/{notificationId}/unread` | Mark an owned notification as unread |
+| `PATCH` | `/api/v1/notifications/read-all` | Mark all current user's notifications as read |
+| `DELETE` | `/api/v1/notifications/{notificationId}` | Delete an owned notification |
+| `GET` | `/api/v1/activity?page=0&size=20` | Activity from workspaces/projects visible to the current user |
+| `GET` | `/api/v1/workspaces/{workspaceId}/activity` | Workspace activity filtered to visible projects |
+| `GET` | `/api/v1/projects/{projectId}/activity` | Activity for an accessible project |
+
+Task assignments/reassignments, status and priority changes, task comments, membership additions, workspace/project updates, and chat message actions create activity. Notifications are sent to assignees/comment stakeholders, added members, and affected workspace/project members, excluding the actor and rechecking recipient membership and active status. Chat messages do not notify every project member; chat mentions are not implemented. Notification data is persisted after the originating transaction commits and then sent to the authenticated user's `/user/queue/notifications` destination. Existing JWT authentication is also used for STOMP connections, and the server does not accept a client-selected recipient.
+
+The global activity feed is available at `/activity`. The notification bell is included in the authenticated workspace header, shows recent notifications and unread count, and links notifications to their related task, project, or workspace. The simple broker remains in-memory; disconnected clients recover notifications from the REST API.
+
+## Module 7: File management and attachments
+
+Flyway migration `V7__create_file_attachments.sql` adds file metadata and indexes and extends the activity type constraint for file upload/deletion events. V1-V6 remain unchanged; Hibernate continues to validate the migrated schema. The backend accepts only PDF, JPEG, PNG, and GIF based on file signature rather than the client-provided MIME type. Filenames are reduced to a sanitized basename, while stored files use generated UUID names.
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `POST` | `/api/v1/workspaces/{workspaceId}/files` | Multipart upload to a workspace (`file` field) |
+| `GET` | `/api/v1/workspaces/{workspaceId}/files?page=0&size=10` | Paginated workspace-level files |
+| `POST` | `/api/v1/projects/{projectId}/files` | Multipart upload to a project (`file` field) |
+| `GET` | `/api/v1/projects/{projectId}/files?page=0&size=10` | Paginated project attachments |
+| `GET` | `/api/v1/files/{fileId}/download` | Authorized attachment download |
+| `DELETE` | `/api/v1/files/{fileId}` | Delete an uploaded file or moderate as an administrator |
+
+Workspace members can access workspace files; project files require project membership (workspace OWNER/ADMIN may access all projects). The uploader can delete their own files. Workspace OWNER/ADMIN can moderate workspace files, and project managers plus workspace OWNER/ADMIN can moderate project files. File metadata responses omit storage keys and filesystem paths. Workspace/project deletion removes corresponding metadata and schedules local content cleanup after database commit.
+
+Set `SYNCORA_FILE_STORAGE_DIR` to configure the local storage root, `SYNCORA_MAX_FILE_SIZE` to change the per-file limit, and `SYNCORA_MAX_REQUEST_SIZE` to accommodate the multipart request size. The defaults are `./var/syncora/uploads`, `10MB`, and `11MB`, respectively. Keep the directory on persistent local storage and do not expose it directly through a web server. Cloud storage and multi-server file sharing are not part of this module.
+
+## Dashboard and workspace direct messages
+
+After login, users land on `/dashboard`, which summarizes their workspaces, recent projects, assigned tasks, and recent activity. The authenticated header includes distinct Workspace, Activity, Notifications, email, Profile, and Log out controls. Activity items include actor initials, action icons, date groupings, resource links, and a dashboard back link. Access tokens remain in the existing in-memory authentication context.
+
+Flyway migration `V8__create_direct_messaging.sql` adds workspace-scoped one-to-one conversations and persistent messages. It leaves V1-V7 unchanged. Composite foreign keys require both participants to remain workspace members; the API additionally checks that users are active and that the caller is a participant.
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/api/v1/workspaces/{workspaceId}/direct-conversations` | List the caller's conversations in a workspace |
+| `POST` | `/api/v1/workspaces/{workspaceId}/direct-conversations` | Create or retrieve the conversation for `{ "recipientId": "..." }` |
+| `GET` | `/api/v1/direct-conversations/{conversationId}/messages?page=0&size=50` | Read chronological persistent history |
+| `POST` | `/api/v1/direct-conversations/{conversationId}/messages` | Send a message using the authenticated sender |
+
+Direct-message STOMP clients connect to `/ws`, subscribe to `/topic/direct/{conversationId}`, and send to `/app/direct/{conversationId}/messages`. The existing JWT interceptor verifies membership and conversation participation on every direct subscription and send. Messages are persisted in the request transaction and broadcast only after commit; the existing project chat destinations and authorization remain supported. The simple broker is in-memory, so multi-instance message fanout is not provided.

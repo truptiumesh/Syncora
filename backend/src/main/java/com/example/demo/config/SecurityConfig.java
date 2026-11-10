@@ -41,6 +41,7 @@ public class SecurityConfig {
 						.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 						.requestMatchers("/api/v1/auth/register", "/api/v1/auth/login", "/actuator/health")
 						.permitAll()
+						.requestMatchers("/ws", "/ws/**").permitAll()
 						.anyRequest().authenticated())
 				.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
 				.build();
@@ -53,10 +54,17 @@ public class SecurityConfig {
 
 	@Bean
 	CorsConfigurationSource corsConfigurationSource(
-			@Value("${app.cors.allowed-origin}") String allowedOrigin) {
+			@Value("${app.cors.allowed-origins}") String configuredOrigins) {
 		CorsConfiguration configuration = new CorsConfiguration();
-		configuration.setAllowedOrigins(List.of(allowedOrigin));
-		configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+		List<String> allowedOrigins = List.of(configuredOrigins.split(",")).stream()
+				.map(String::trim)
+				.filter(origin -> !origin.isEmpty())
+				.toList();
+		if (allowedOrigins.isEmpty()) {
+			throw new IllegalStateException("At least one CORS allowed origin must be configured.");
+		}
+		configuration.setAllowedOrigins(allowedOrigins);
+		configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 		configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
 		configuration.setAllowCredentials(false);
 

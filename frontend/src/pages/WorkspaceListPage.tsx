@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { FormField } from '../components/FormField'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { WorkspaceHeader } from '../components/WorkspaceHeader'
@@ -9,10 +9,11 @@ import { apiErrorMessage } from '../utils/apiError'
 
 export function WorkspaceListPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [workspaces, setWorkspaces] = useState<WorkspaceResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [showCreate, setShowCreate] = useState(false)
+  const [showCreate, setShowCreate] = useState(searchParams.get('create') === 'true')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [creating, setCreating] = useState(false)

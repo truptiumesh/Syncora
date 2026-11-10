@@ -2,6 +2,7 @@ package com.example.demo;
 
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -48,6 +49,29 @@ class AuthenticationIntegrationTests {
 	@DynamicPropertySource
 	static void configureProperties(DynamicPropertyRegistry registry) {
 		registry.add("app.jwt.secret", () -> TEST_SECRET);
+	}
+
+	@Test
+	void corsAllowsBothLocalViteHostnamesAndRejectsUnconfiguredOrigins() throws Exception {
+		for (String origin : new String[] {"http://localhost:5173", "http://127.0.0.1:5173"}) {
+			for (String method : new String[] {"POST", "PATCH"}) {
+				mockMvc.perform(options("/api/v1/auth/login")
+								.header("Origin", origin)
+								.header("Access-Control-Request-Method", method)
+								.header("Access-Control-Request-Headers", "content-type,authorization"))
+						.andExpect(status().isOk())
+						.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+								.header().string("Access-Control-Allow-Origin", origin))
+						.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+								.header().string("Access-Control-Allow-Methods", org.hamcrest.Matchers.containsString(method)));
+			}
+		}
+
+		mockMvc.perform(options("/api/v1/auth/login")
+						.header("Origin", "https://untrusted.example")
+						.header("Access-Control-Request-Method", "POST")
+						.header("Access-Control-Request-Headers", "content-type,authorization"))
+				.andExpect(status().isForbidden());
 	}
 
 	@Test

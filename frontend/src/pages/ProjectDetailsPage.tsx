@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { PrimaryButton } from '../components/PrimaryButton'
+import { FileManager } from '../components/FileManager'
 import { WorkspaceHeader } from '../components/WorkspaceHeader'
 import { projectApi } from '../services/projectService'
 import { workspaceApi } from '../services/workspaceService'
@@ -210,6 +211,7 @@ export function ProjectDetailsPage() {
                   <span><strong>Your role</strong>{project.currentUserRole || workspace.currentUserRole}</span>
                 </div>
                 <Link className="button-outline project-tasks-link" to={`/projects/${project.id}/tasks`}>View project tasks →</Link>
+                <Link className="button-outline project-tasks-link" to={`/projects/${project.id}/chat`}>Open project chat →</Link>
               </>
             )}
           </div>
@@ -223,6 +225,8 @@ export function ProjectDetailsPage() {
             </div>
           )}
         </section>
+
+        <FileManager projectId={projectId} canModerate={canManageProject} />
 
         <section className="project-members-section">
           <div className="workspace-detail-heading">

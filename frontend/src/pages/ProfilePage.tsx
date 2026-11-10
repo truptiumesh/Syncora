@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import axios from 'axios'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { FormField } from '../components/FormField'
 import { PrimaryButton } from '../components/PrimaryButton'
+import { WorkspaceHeader } from '../components/WorkspaceHeader'
 import { authApi } from '../services/authService'
 import type { UserResponse } from '../types/auth'
 import { apiErrorMessage } from '../utils/apiError'
@@ -97,28 +98,13 @@ export function ProfilePage() {
     }
   }
 
-  function signOut() {
-    logout()
-    navigate('/login', { replace: true })
-  }
-
   if (pageLoading) {
-    return <main className="loading-screen"><span className="spinner" />Loading your profile...</main>
+    return <main className="workspace-page"><WorkspaceHeader /><div className="workspace-loading" role="status"><span className="spinner" />Loading your profile...</div></main>
   }
 
   return (
     <main className="profile-page">
-      <header className="topbar">
-        <a className="brand" href="/profile" aria-label="Syncora home">
-          <span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span>
-          <span>syncora</span>
-        </a>
-        <div className="topbar-user">
-          <Link className="topbar-email workspace-nav-link" to="/workspaces">Workspaces</Link>
-          <span className="topbar-email">{user?.email}</span>
-          <button className="button-quiet" type="button" onClick={signOut}>Log out <span aria-hidden="true">↗</span></button>
-        </div>
-      </header>
+      <WorkspaceHeader />
       <section className="profile-content">
         <div className="profile-heading">
           <span className="eyebrow">YOUR ACCOUNT</span>

@@ -7,6 +7,7 @@ import { ProjectDetailsPage } from './pages/ProjectDetailsPage'
 import { ProjectListPage } from './pages/ProjectListPage'
 import { projectApi } from './services/projectService'
 import { workspaceApi } from './services/workspaceService'
+import { fileApi } from './services/fileService'
 import type { ProjectMemberResponse, ProjectResponse } from './types/project'
 import type { WorkspaceResponse } from './types/workspace'
 
@@ -29,6 +30,17 @@ vi.mock('./services/projectService', () => ({
 vi.mock('./services/workspaceService', () => ({
   workspaceApi: {
     get: vi.fn(),
+  },
+}))
+
+vi.mock('./services/fileService', () => ({
+  fileApi: {
+    listWorkspace: vi.fn(),
+    listProject: vi.fn(),
+    uploadWorkspace: vi.fn(),
+    uploadProject: vi.fn(),
+    download: vi.fn(),
+    delete: vi.fn(),
   },
 }))
 
@@ -90,6 +102,9 @@ describe('project pages', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(workspaceApi.get).mockResolvedValue(workspace)
+    vi.mocked(fileApi.listProject).mockResolvedValue({
+      content: [], totalElements: 0, totalPages: 0, number: 0, size: 10, first: true, last: true,
+    })
     vi.mocked(projectApi.list).mockResolvedValue({
       content: [project],
       totalElements: 1,
@@ -132,6 +147,26 @@ describe('project pages', () => {
 
   it('creates a project with validated form data', async () => {
     const user = userEvent.setup()
+    vi.mocked(projectApi.create).mockResolvedValueOnce({ ...project, id: 'created', name: 'New initiative' })
+    vi.mocked(projectApi.list)
+      .mockResolvedValueOnce({
+        content: [project],
+        totalElements: 1,
+        totalPages: 1,
+        number: 0,
+        size: 10,
+        first: true,
+        last: true,
+      })
+      .mockResolvedValueOnce({
+        content: [{ ...project, id: 'created', name: 'New initiative' }],
+        totalElements: 1,
+        totalPages: 1,
+        number: 0,
+        size: 10,
+        first: true,
+        last: true,
+      })
     renderProjectPage(`/workspaces/${workspace.id}/projects`)
 
     await user.click(await screen.findByRole('button', { name: /create project/i }))
@@ -146,6 +181,24 @@ describe('project pages', () => {
       startDate: null,
       dueDate: null,
     }))
+    expect(await screen.findByText('“New initiative” was created and saved.')).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'New initiative' })).toHaveAttribute('href', '/projects/created')
+    expect(projectApi.list).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not claim project persistence if the refreshed list omits the created record', async () => {
+    const user = userEvent.setup()
+    vi.mocked(projectApi.create).mockResolvedValueOnce({ ...project, id: 'not-persisted', name: 'Not persisted' })
+    renderProjectPage(`/workspaces/${workspace.id}/projects`)
+
+    await user.click(await screen.findByRole('button', { name: /create project/i }))
+    fireEvent.change(screen.getByLabelText('Project name'), { target: { value: 'Not persisted' } })
+    await user.click(screen.getAllByRole('button', { name: 'Create project' })[1])
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The server accepted “Not persisted”, but it was not present when the project list was refreshed.',
+    )
+    expect(screen.queryByText('“Not persisted” was created and saved.')).not.toBeInTheDocument()
   })
 
   it('sends search and status filters to the project API', async () => {

@@ -9,6 +9,8 @@ import com.example.demo.entity.Workspace;
 import com.example.demo.entity.WorkspaceMember;
 import com.example.demo.enums.ProjectRole;
 import com.example.demo.enums.ProjectStatus;
+import com.example.demo.enums.ActivityType;
+import com.example.demo.enums.NotificationType;
 import com.example.demo.exception.ProjectNotFoundException;
 import com.example.demo.exception.WorkspaceNotFoundException;
 import com.example.demo.repository.ProjectMemberRepository;
@@ -21,6 +23,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.Locale;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -28,6 +31,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,18 +42,24 @@ public class ProjectService {
 	private final WorkspaceRepository workspaceRepository;
 	private final WorkspaceAuthorizationService workspaceAuthorizationService;
 	private final ProjectAuthorizationService projectAuthorizationService;
+	private final ApplicationEventPublisher eventPublisher;
+	private final FileAttachmentService fileAttachmentService;
 
 	public ProjectService(
 			ProjectRepository projectRepository,
 			ProjectMemberRepository projectMemberRepository,
 			WorkspaceRepository workspaceRepository,
 			WorkspaceAuthorizationService workspaceAuthorizationService,
-			ProjectAuthorizationService projectAuthorizationService) {
+			ProjectAuthorizationService projectAuthorizationService,
+			ApplicationEventPublisher eventPublisher,
+			FileAttachmentService fileAttachmentService) {
 		this.projectRepository = projectRepository;
 		this.projectMemberRepository = projectMemberRepository;
 		this.workspaceRepository = workspaceRepository;
 		this.workspaceAuthorizationService = workspaceAuthorizationService;
 		this.projectAuthorizationService = projectAuthorizationService;
+		this.eventPublisher = eventPublisher;
+		this.fileAttachmentService = fileAttachmentService;
 	}
 
 	@Transactional
@@ -79,6 +89,16 @@ public class ProjectService {
 		manager.setUser(creator.getUser());
 		manager.setRole(ProjectRole.PROJECT_MANAGER);
 		projectMemberRepository.save(manager);
+		eventPublisher.publishEvent(ActivityEvent.create(
+				creator.getUser(),
+				ActivityType.PROJECT_CREATED,
+				creator.getUser().getFullName() + " created project " + project.getName() + ".",
+				workspaceId,
+				project.getId(),
+				null,
+				null,
+				null,
+				List.of()));
 		return response(project, creator.getUser().getFullName(), 1, ProjectRole.PROJECT_MANAGER);
 	}
 
@@ -109,7 +129,8 @@ public class ProjectService {
 				.findManagerNames(projectIds, ProjectRole.PROJECT_MANAGER).stream()
 				.collect(Collectors.toMap(
 						ProjectMemberRepository.ManagerName::getProjectId,
-						ProjectMemberRepository.ManagerName::getFullName));
+						ProjectMemberRepository.ManagerName::getFullName,
+						(first, ignored) -> first));
 		Map<UUID, Long> counts = projectMemberRepository.countMembersByProjectIds(projectIds).stream()
 				.collect(Collectors.toMap(
 						ProjectMemberRepository.MemberCount::getProjectId,
@@ -150,6 +171,11 @@ public class ProjectService {
 		project.setStatus(request.status());
 		project.setStartDate(request.startDate());
 		project.setDueDate(request.dueDate());
+		publishProjectUpdate(
+				workspaceAuthorizationService.findActiveUser(principalName),
+				project,
+				ActivityType.PROJECT_UPDATED,
+				"updated project " + project.getName() + ".");
 		return responseFor(project, access.projectMember());
 	}
 
@@ -161,6 +187,11 @@ public class ProjectService {
 		if (project.getArchivedAt() == null) {
 			project.setStatus(ProjectStatus.ARCHIVED);
 			project.setArchivedAt(LocalDateTime.now(Clock.systemUTC()));
+			publishProjectUpdate(
+					workspaceAuthorizationService.findActiveUser(principalName),
+					project,
+					ActivityType.PROJECT_UPDATED,
+					"archived project " + project.getName() + ".");
 		}
 		return responseFor(project, access.projectMember());
 	}
@@ -173,6 +204,11 @@ public class ProjectService {
 		if (project.getArchivedAt() != null) {
 			project.setStatus(ProjectStatus.ACTIVE);
 			project.setArchivedAt(null);
+			publishProjectUpdate(
+					workspaceAuthorizationService.findActiveUser(principalName),
+					project,
+					ActivityType.PROJECT_UPDATED,
+					"restored project " + project.getName() + ".");
 		}
 		return responseFor(project, access.projectMember());
 	}
@@ -181,6 +217,7 @@ public class ProjectService {
 	public void delete(UUID projectId, String principalName) {
 		projectRepository.findByIdForUpdate(projectId).orElseThrow(ProjectNotFoundException::new);
 		Access access = projectAuthorizationService.requireWorkspaceAdmin(projectId, principalName);
+		fileAttachmentService.scheduleCleanupForProject(projectId);
 		projectMemberRepository.deleteAll(
 				projectMemberRepository.findByProject_IdOrderByJoinedAtAsc(projectId));
 		projectRepository.delete(access.project());
@@ -195,6 +232,32 @@ public class ProjectService {
 				manager.getUser().getFullName(),
 				projectMemberRepository.countByProject_Id(project.getId()),
 				currentMember == null ? null : currentMember.getRole());
+	}
+
+	private void publishProjectUpdate(
+			com.example.demo.entity.User actor,
+			Project project,
+			ActivityType type,
+			String action) {
+		List<ActivityEvent.NotificationTarget> notifications = projectMemberRepository
+				.findByProject_IdOrderByJoinedAtAsc(project.getId()).stream()
+				.filter(member -> member.getUser().isActive())
+				.map(member -> new ActivityEvent.NotificationTarget(
+						member.getUser().getId(),
+						NotificationType.PROJECT_UPDATED,
+						"Project updated",
+						"Project " + project.getName() + " was updated."))
+				.toList();
+		eventPublisher.publishEvent(ActivityEvent.create(
+				actor,
+				type,
+				actor.getFullName() + " " + action,
+				project.getWorkspace().getId(),
+				project.getId(),
+				null,
+				null,
+				null,
+				notifications));
 	}
 
 	private ProjectResponse response(

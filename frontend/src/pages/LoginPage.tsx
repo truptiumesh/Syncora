@@ -20,7 +20,7 @@ export function LoginPage() {
     setLoading(true)
     try {
       await login({ email: email.trim(), password })
-      navigate('/profile', { replace: true })
+      navigate('/dashboard', { replace: true })
     } catch (requestError) {
       setError(apiErrorMessage(requestError, 'We could not sign you in. Please try again.'))
     } finally {

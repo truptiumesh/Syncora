@@ -11,6 +11,8 @@ import com.example.demo.entity.Task;
 import com.example.demo.entity.User;
 import com.example.demo.enums.TaskPriority;
 import com.example.demo.enums.TaskStatus;
+import com.example.demo.enums.ActivityType;
+import com.example.demo.enums.NotificationType;
 import com.example.demo.exception.InvalidTaskAssigneeException;
 import com.example.demo.exception.ProjectNotFoundException;
 import com.example.demo.exception.TaskNotFoundException;
@@ -24,10 +26,13 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -45,6 +50,7 @@ public class TaskService {
 	private final WorkspaceAuthorizationService workspaceAuthorizationService;
 	private final ProjectAuthorizationService projectAuthorizationService;
 	private final TaskAuthorizationService taskAuthorizationService;
+	private final ApplicationEventPublisher eventPublisher;
 
 	public TaskService(
 			TaskRepository taskRepository,
@@ -54,7 +60,8 @@ public class TaskService {
 			UserRepository userRepository,
 			WorkspaceAuthorizationService workspaceAuthorizationService,
 			ProjectAuthorizationService projectAuthorizationService,
-			TaskAuthorizationService taskAuthorizationService) {
+			TaskAuthorizationService taskAuthorizationService,
+			ApplicationEventPublisher eventPublisher) {
 		this.taskRepository = taskRepository;
 		this.taskCommentRepository = taskCommentRepository;
 		this.projectRepository = projectRepository;
@@ -63,6 +70,7 @@ public class TaskService {
 		this.workspaceAuthorizationService = workspaceAuthorizationService;
 		this.projectAuthorizationService = projectAuthorizationService;
 		this.taskAuthorizationService = taskAuthorizationService;
+		this.eventPublisher = eventPublisher;
 	}
 
 	@Transactional
@@ -85,6 +93,16 @@ public class TaskService {
 		task.setCreatedBy(actor);
 		task.setDueDate(request.dueDate());
 		task = taskRepository.saveAndFlush(task);
+		List<ActivityEvent.NotificationTarget> notifications = assignee == null ? List.of() : List.of(
+				new ActivityEvent.NotificationTarget(
+						assignee.getId(),
+						NotificationType.TASK_ASSIGNED,
+						"Task assigned",
+						"You were assigned to task " + task.getTaskKey() + "."));
+		publishActivity(
+				actor, task, ActivityType.TASK_CREATED,
+				actor.getFullName() + " created task " + task.getTaskKey() + ".",
+				notifications);
 		return TaskResponse.from(task, 0);
 	}
 
@@ -144,9 +162,21 @@ public class TaskService {
 		Task task = lockTask(taskId);
 		taskAuthorizationService.requireTaskAccess(taskId, principalName);
 		ensureProjectActive(task.getProject());
+		String previousTitle = task.getTitle();
+		String previousDescription = task.getDescription();
+		LocalDate previousDueDate = task.getDueDate();
 		task.setTitle(request.title().trim());
 		task.setDescription(normalizeOptional(request.description()));
 		task.setDueDate(request.dueDate());
+		if (!Objects.equals(previousTitle, task.getTitle())
+				|| !Objects.equals(previousDescription, task.getDescription())
+				|| !Objects.equals(previousDueDate, task.getDueDate())) {
+			User actor = workspaceAuthorizationService.findActiveUser(principalName);
+			publishActivity(
+					actor, task, ActivityType.TASK_UPDATED,
+					actor.getFullName() + " updated task " + task.getTaskKey() + ".",
+					List.of());
+		}
 		return TaskResponse.from(task, taskCommentRepository.countByTask_Id(taskId));
 	}
 
@@ -156,10 +186,26 @@ public class TaskService {
 		Task task = lockTask(taskId);
 		taskAuthorizationService.requireTaskAccess(taskId, principalName);
 		ensureProjectActive(task.getProject());
+		TaskStatus previousStatus = task.getStatus();
 		task.setStatus(request.status());
 		task.setCompletedAt(request.status() == TaskStatus.DONE
 				? (task.getCompletedAt() == null ? LocalDateTime.now(Clock.systemUTC()) : task.getCompletedAt())
 				: null);
+		if (previousStatus != task.getStatus()) {
+			User actor = workspaceAuthorizationService.findActiveUser(principalName);
+			List<ActivityEvent.NotificationTarget> notifications = task.getAssignee() == null
+					? List.of()
+					: List.of(new ActivityEvent.NotificationTarget(
+							task.getAssignee().getId(),
+							NotificationType.TASK_STATUS_CHANGED,
+							"Task status changed",
+							"Task " + task.getTaskKey() + " is now " + task.getStatus() + "."));
+			publishActivity(
+					actor, task, ActivityType.TASK_STATUS_CHANGED,
+					actor.getFullName() + " changed task " + task.getTaskKey()
+							+ " to " + task.getStatus() + ".",
+					notifications);
+		}
 		return TaskResponse.from(task, taskCommentRepository.countByTask_Id(taskId));
 	}
 
@@ -169,7 +215,23 @@ public class TaskService {
 		Task task = lockTask(taskId);
 		taskAuthorizationService.requireTaskAccess(taskId, principalName);
 		ensureProjectActive(task.getProject());
+		TaskPriority previousPriority = task.getPriority();
 		task.setPriority(request.priority());
+		if (previousPriority != task.getPriority()) {
+			User actor = workspaceAuthorizationService.findActiveUser(principalName);
+			List<ActivityEvent.NotificationTarget> notifications = task.getAssignee() == null
+					? List.of()
+					: List.of(new ActivityEvent.NotificationTarget(
+							task.getAssignee().getId(),
+							NotificationType.TASK_PRIORITY_CHANGED,
+							"Task priority changed",
+							"Task " + task.getTaskKey() + " priority is now " + task.getPriority() + "."));
+			publishActivity(
+					actor, task, ActivityType.TASK_PRIORITY_CHANGED,
+					actor.getFullName() + " changed task " + task.getTaskKey()
+							+ " priority to " + task.getPriority() + ".",
+					notifications);
+		}
 		return TaskResponse.from(task, taskCommentRepository.countByTask_Id(taskId));
 	}
 
@@ -179,7 +241,31 @@ public class TaskService {
 		Task task = lockTask(taskId);
 		taskAuthorizationService.requireTaskAccess(taskId, principalName);
 		ensureProjectActive(task.getProject());
-		task.setAssignee(resolveAssignee(task.getProject().getId(), request.assigneeId()));
+		User previousAssignee = task.getAssignee();
+		User newAssignee = resolveAssignee(task.getProject().getId(), request.assigneeId());
+		task.setAssignee(newAssignee);
+		if (!Objects.equals(
+				previousAssignee == null ? null : previousAssignee.getId(),
+				newAssignee == null ? null : newAssignee.getId())) {
+			User actor = workspaceAuthorizationService.findActiveUser(principalName);
+			ActivityType activityType = previousAssignee == null
+					? ActivityType.TASK_ASSIGNED
+					: ActivityType.TASK_REASSIGNED;
+			List<ActivityEvent.NotificationTarget> notifications = newAssignee == null
+					? List.of()
+					: List.of(new ActivityEvent.NotificationTarget(
+							newAssignee.getId(),
+							previousAssignee == null
+									? NotificationType.TASK_ASSIGNED
+									: NotificationType.TASK_REASSIGNED,
+							previousAssignee == null ? "Task assigned" : "Task reassigned",
+							"You were assigned to task " + task.getTaskKey() + "."));
+			publishActivity(
+					actor, task, activityType,
+					actor.getFullName() + (previousAssignee == null ? " assigned " : " reassigned ")
+							+ "task " + task.getTaskKey() + ".",
+					notifications);
+		}
 		return TaskResponse.from(task, taskCommentRepository.countByTask_Id(taskId));
 	}
 
@@ -238,5 +324,23 @@ public class TaskService {
 
 	private String normalizeOptional(String value) {
 		return value == null || value.isBlank() ? null : value.trim();
+	}
+
+	private void publishActivity(
+			User actor,
+			Task task,
+			ActivityType type,
+			String description,
+			List<ActivityEvent.NotificationTarget> notifications) {
+		eventPublisher.publishEvent(ActivityEvent.create(
+				actor,
+				type,
+				description,
+				task.getProject().getWorkspace().getId(),
+				task.getProject().getId(),
+				task.getId(),
+				null,
+				null,
+				notifications));
 	}
 }

@@ -6,8 +6,14 @@ export function setAccessToken(token: string | null) {
   accessToken = token
 }
 
+const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
+
+export const apiBaseUrl = (configuredApiBaseUrl
+  || (import.meta.env.DEV ? 'http://localhost:8080' : window.location.origin))
+  .replace(/\/+$/, '')
+
 export const http = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080',
+  baseURL: apiBaseUrl,
   headers: { 'Content-Type': 'application/json' },
 })
 

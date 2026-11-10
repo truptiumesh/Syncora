@@ -30,7 +30,7 @@ export function RegisterPage() {
     setLoading(true)
     try {
       await register({ fullName: fullName.trim(), email: email.trim(), password })
-      navigate('/profile', { replace: true })
+      navigate('/dashboard', { replace: true })
     } catch (requestError) {
       setError(apiErrorMessage(requestError, 'We could not create your account. Please try again.'))
     } finally {

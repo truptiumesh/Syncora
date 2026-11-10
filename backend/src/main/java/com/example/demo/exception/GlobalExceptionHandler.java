@@ -51,7 +51,11 @@ public class GlobalExceptionHandler {
 			ProjectNotFoundException.class,
 			ProjectMemberNotFoundException.class,
 			TaskNotFoundException.class,
-			TaskCommentNotFoundException.class
+			TaskCommentNotFoundException.class,
+			ChatMessageNotFoundException.class,
+			DirectConversationNotFoundException.class,
+			NotificationNotFoundException.class,
+			FileAttachmentNotFoundException.class
 	})
 	public ResponseEntity<ApiErrorResponse> handleWorkspaceResourceNotFound(
 			RuntimeException exception, HttpServletRequest request) {
@@ -79,6 +83,21 @@ public class GlobalExceptionHandler {
 	public ResponseEntity<ApiErrorResponse> handleBadRequest(
 			IllegalArgumentException exception, HttpServletRequest request) {
 		return error(HttpStatus.BAD_REQUEST, exception.getMessage(), request, Map.of());
+	}
+
+	@ExceptionHandler(FileTooLargeException.class)
+	public ResponseEntity<ApiErrorResponse> handleFileTooLarge(HttpServletRequest request) {
+		return error(HttpStatus.PAYLOAD_TOO_LARGE, "The file exceeds the configured upload size limit.", request, Map.of());
+	}
+
+	@ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+	public ResponseEntity<ApiErrorResponse> handleMultipartTooLarge(HttpServletRequest request) {
+		return error(HttpStatus.PAYLOAD_TOO_LARGE, "The file exceeds the configured upload size limit.", request, Map.of());
+	}
+
+	@ExceptionHandler(UnsupportedFileTypeException.class)
+	public ResponseEntity<ApiErrorResponse> handleUnsupportedFileType(HttpServletRequest request) {
+		return error(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Only PDF, JPEG, PNG, and GIF files are allowed.", request, Map.of());
 	}
 
 	@ExceptionHandler(InvalidTaskAssigneeException.class)

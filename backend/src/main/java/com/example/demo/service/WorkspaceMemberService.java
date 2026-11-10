@@ -6,6 +6,8 @@ import com.example.demo.dto.response.WorkspaceMemberResponse;
 import com.example.demo.entity.User;
 import com.example.demo.entity.WorkspaceMember;
 import com.example.demo.enums.WorkspaceRole;
+import com.example.demo.enums.ActivityType;
+import com.example.demo.enums.NotificationType;
 import com.example.demo.exception.WorkspaceMemberExistsException;
 import com.example.demo.exception.WorkspaceMemberNotFoundException;
 import com.example.demo.exception.WorkspaceOwnerCannotLeaveException;
@@ -15,6 +17,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,14 +26,17 @@ public class WorkspaceMemberService {
 	private final UserRepository userRepository;
 	private final WorkspaceMemberRepository memberRepository;
 	private final WorkspaceAuthorizationService authorizationService;
+	private final ApplicationEventPublisher eventPublisher;
 
 	public WorkspaceMemberService(
 			UserRepository userRepository,
 			WorkspaceMemberRepository memberRepository,
-			WorkspaceAuthorizationService authorizationService) {
+			WorkspaceAuthorizationService authorizationService,
+			ApplicationEventPublisher eventPublisher) {
 		this.userRepository = userRepository;
 		this.memberRepository = memberRepository;
 		this.authorizationService = authorizationService;
+		this.eventPublisher = eventPublisher;
 	}
 
 	@Transactional(readOnly = true)
@@ -58,7 +64,23 @@ public class WorkspaceMemberService {
 		member.setWorkspace(actor.getWorkspace());
 		member.setUser(user);
 		member.setRole(WorkspaceRole.MEMBER);
-		return WorkspaceMemberResponse.from(memberRepository.save(member));
+		member = memberRepository.saveAndFlush(member);
+		eventPublisher.publishEvent(ActivityEvent.create(
+				actor.getUser(),
+				ActivityType.WORKSPACE_MEMBER_ADDED,
+				actor.getUser().getFullName() + " added " + user.getFullName()
+						+ " to workspace " + actor.getWorkspace().getName() + ".",
+				workspaceId,
+				null,
+				null,
+				null,
+				null,
+				List.of(new ActivityEvent.NotificationTarget(
+						user.getId(),
+						NotificationType.WORKSPACE_MEMBER_ADDED,
+						"Added to a workspace",
+						"You were added to workspace " + actor.getWorkspace().getName() + "."))));
+		return WorkspaceMemberResponse.from(member);
 	}
 
 	@Transactional

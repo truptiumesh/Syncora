@@ -15,6 +15,8 @@ import org.springframework.data.repository.query.Param;
 public interface ProjectRepository extends JpaRepository<Project, UUID> {
 	boolean existsByWorkspace_IdAndKey(UUID workspaceId, String key);
 
+	Optional<Project> findByWorkspace_IdAndName(UUID workspaceId, String name);
+
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select p from Project p where p.id = :projectId")
 	Optional<Project> findByIdForUpdate(@Param("projectId") UUID projectId);
@@ -29,7 +31,7 @@ public interface ProjectRepository extends JpaRepository<Project, UUID> {
 			  and (:status is null or p.status = :status)
 			  and ((:archived = true and p.archivedAt is not null)
 			       or (:archived = false and p.archivedAt is null))
-			  and (:search is null
+			  and (coalesce(:search, '') = ''
 			       or lower(p.name) like lower(concat('%', :search, '%'))
 			       or lower(p.key) like lower(concat('%', :search, '%')))
 			""")

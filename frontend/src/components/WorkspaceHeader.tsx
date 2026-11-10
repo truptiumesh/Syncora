@@ -1,27 +1,19 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { NotificationBell } from './NotificationBell'
 
 export function WorkspaceHeader() {
-  const { user, logout } = useAuth()
-  const navigate = useNavigate()
-
-  function signOut() {
-    logout()
-    navigate('/login', { replace: true })
-  }
+  const { user } = useAuth()
 
   return (
-    <header className="topbar">
-      <Link className="brand" to="/workspaces" aria-label="Syncora workspaces">
-        <span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span>
-        <span>syncora</span>
-      </Link>
-      <nav className="topbar-user" aria-label="Account navigation">
-        <Link className="topbar-email workspace-nav-link" to="/profile">Profile</Link>
-        <span className="topbar-email">{user?.email}</span>
-        <button className="button-quiet" type="button" onClick={signOut}>
-          Log out <span aria-hidden="true">↗</span>
-        </button>
+    <header className="app-page-topbar">
+      <Link className="app-topbar-home" to="/dashboard" aria-label="Go to dashboard">SYNCORA <span>·</span> Command centre</Link>
+      <nav className="app-topbar-actions" aria-label="Account navigation">
+        <NotificationBell />
+        <Link className="app-topbar-profile" to="/profile">
+          <span className="sidebar-avatar" aria-hidden="true">{user?.fullName.trim().charAt(0).toUpperCase() || '?'}</span>
+          <span>{user?.fullName || 'My profile'}</span>
+        </Link>
       </nav>
     </header>
   )

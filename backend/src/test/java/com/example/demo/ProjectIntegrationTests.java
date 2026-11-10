@@ -1,6 +1,7 @@
 package com.example.demo;
 
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.anyOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -31,6 +32,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest
@@ -98,6 +100,33 @@ class ProjectIntegrationTests {
 	}
 
 	@Test
+	@Transactional(propagation = Propagation.NOT_SUPPORTED)
+	void createdProjectRemainsVisibleAfterTheCreateRequestCommits() throws Exception {
+		User owner = createUser(Role.MEMBER);
+		UUID workspaceId = null;
+		try {
+			workspaceId = createWorkspace(owner, "Persisted project");
+			CreatedProject project = createProject(owner, workspaceId, "Persistent initiative", "PLANNING");
+
+			assertTrue(projectRepository.existsById(project.id()));
+			assertEquals(1, projectMemberRepository.countByProject_IdAndRole(
+					project.id(), ProjectRole.PROJECT_MANAGER));
+			mockMvc.perform(get("/api/v1/workspaces/{id}/projects?page=0&size=100", workspaceId)
+							.header("Authorization", bearer(owner)))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.content[0].id", is(project.id().toString())))
+					.andExpect(jsonPath("$.content[0].name", is("Persistent initiative")));
+		} finally {
+			if (workspaceId != null) {
+				mockMvc.perform(delete("/api/v1/workspaces/{id}", workspaceId)
+								.header("Authorization", bearer(owner)))
+						.andExpect(status().isNoContent());
+			}
+			userRepository.delete(owner);
+		}
+	}
+
+	@Test
 	void projectCreationAndVisibilityRequireWorkspaceMembershipAndProjectAccess() throws Exception {
 		User owner = createUser(Role.MEMBER);
 		User workspaceMember = createUser(Role.MEMBER);
@@ -111,7 +140,7 @@ class ProjectIntegrationTests {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(projectJson("Denied", "PLANNING")))
 				.andExpect(status().isForbidden());
-		mockMvc.perform(get("/api/v1/workspaces/{id}/projects", workspaceId)
+		mockMvc.perform(get("/api/v1/workspaces/{id}/projects?page=0&size=100", workspaceId)
 						.header("Authorization", bearer(outsider)))
 				.andExpect(status().isForbidden());
 		mockMvc.perform(get("/api/v1/projects/{id}", project.id())
@@ -238,6 +267,58 @@ class ProjectIntegrationTests {
 		mockMvc.perform(get("/api/v1/workspaces/{id}/projects?size=101", workspaceId)
 						.header("Authorization", bearer(owner)))
 				.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void listingSupportsOmittedAndNonEmptySearchAtMaximumPageSize() throws Exception {
+		User owner = createUser(Role.MEMBER);
+		UUID workspaceId = createWorkspace(owner, "Optional project search");
+		createProject(owner, workspaceId, "Alpha Platform", "ACTIVE");
+		createProject(owner, workspaceId, "Beta Platform", "PLANNING");
+
+		mockMvc.perform(get("/api/v1/workspaces/{id}/projects?page=0&size=100", workspaceId)
+						.header("Authorization", bearer(owner)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.totalElements", is(2)))
+				.andExpect(jsonPath("$.content.length()", is(2)));
+
+		mockMvc.perform(get("/api/v1/workspaces/{id}/projects?search=ALPHA&page=0&size=100", workspaceId)
+						.header("Authorization", bearer(owner)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.totalElements", is(1)))
+				.andExpect(jsonPath("$.content[0].name", is("Alpha Platform")));
+	}
+
+	@Test
+	void listingHandlesProjectsWithMultipleProjectManagers() throws Exception {
+		User owner = createUser(Role.MEMBER);
+		User teammate = createUser(Role.MEMBER);
+		UUID workspaceId = createWorkspace(owner, "Multiple managers");
+		CreatedProject project = createProject(owner, workspaceId, "Shared leadership", "ACTIVE");
+		addWorkspaceMember(owner, workspaceId, teammate);
+		UUID teammateMembership = addProjectMember(owner, project.id(), teammate);
+		changeProjectRole(owner, project.id(), teammateMembership, "PROJECT_MANAGER")
+				.andExpect(status().isOk());
+
+		mockMvc.perform(get("/api/v1/workspaces/{id}/projects?page=0&size=100", workspaceId)
+						.header("Authorization", bearer(owner)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.totalElements", is(1)))
+				.andExpect(jsonPath("$.content[0].projectManager", anyOf(
+						is(owner.getFullName()), is(teammate.getFullName()))))
+				.andExpect(jsonPath("$.content[0].memberCount", is(2)));
+	}
+
+	@Test
+	void listingAnEmptyWorkspaceReturnsAnEmptyPage() throws Exception {
+		User owner = createUser(Role.MEMBER);
+		UUID workspaceId = createWorkspace(owner, "Empty project list");
+
+		mockMvc.perform(get("/api/v1/workspaces/{id}/projects", workspaceId)
+						.header("Authorization", bearer(owner)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.totalElements", is(0)))
+				.andExpect(jsonPath("$.content.length()", is(0)));
 	}
 
 	@Test

@@ -6,6 +6,7 @@ import { AuthProvider } from './auth/AuthContext'
 import { WorkspaceDetailsPage } from './pages/WorkspaceDetailsPage'
 import { WorkspaceListPage } from './pages/WorkspaceListPage'
 import { workspaceApi } from './services/workspaceService'
+import { fileApi } from './services/fileService'
 import type { WorkspaceMemberResponse, WorkspaceResponse } from './types/workspace'
 
 vi.mock('./services/workspaceService', () => ({
@@ -20,6 +21,17 @@ vi.mock('./services/workspaceService', () => ({
     updateMemberRole: vi.fn(),
     removeMember: vi.fn(),
     leave: vi.fn(),
+  },
+}))
+
+vi.mock('./services/fileService', () => ({
+  fileApi: {
+    listWorkspace: vi.fn(),
+    listProject: vi.fn(),
+    uploadWorkspace: vi.fn(),
+    uploadProject: vi.fn(),
+    download: vi.fn(),
+    delete: vi.fn(),
   },
 }))
 
@@ -65,6 +77,9 @@ describe('workspace pages', () => {
     vi.mocked(workspaceApi.create).mockResolvedValue(workspace)
     vi.mocked(workspaceApi.get).mockResolvedValue(workspace)
     vi.mocked(workspaceApi.listMembers).mockResolvedValue([member])
+    vi.mocked(fileApi.listWorkspace).mockResolvedValue({
+      content: [], totalElements: 0, totalPages: 0, number: 0, size: 10, first: true, last: true,
+    })
     vi.mocked(workspaceApi.addMember).mockResolvedValue({
       ...member,
       id: '550e8400-e29b-41d4-a716-446655440004',

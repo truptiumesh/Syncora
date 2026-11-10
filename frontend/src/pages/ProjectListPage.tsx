@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { WorkspaceHeader } from '../components/WorkspaceHeader'
 import { projectApi } from '../services/projectService'
@@ -12,7 +12,7 @@ const statuses: ProjectStatus[] = ['PLANNING', 'ACTIVE', 'ON_HOLD', 'COMPLETED']
 
 export function ProjectListPage() {
   const { workspaceId = '' } = useParams()
-  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [workspace, setWorkspace] = useState<WorkspaceResponse | null>(null)
   const [result, setResult] = useState<ProjectPage | null>(null)
   const [search, setSearch] = useState('')
@@ -21,7 +21,8 @@ export function ProjectListPage() {
   const [page, setPage] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [showCreate, setShowCreate] = useState(false)
+  const [success, setSuccess] = useState('')
+  const [showCreate, setShowCreate] = useState(searchParams.get('create') === 'true')
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -60,11 +61,13 @@ export function ProjectListPage() {
   async function createProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
+    setSuccess('')
     if (startDate && dueDate && dueDate < startDate) {
       setError('Due date must be on or after the start date.')
       return
     }
     setCreating(true)
+    let createdProject: ProjectResponse | null = null
     try {
       const project = await projectApi.create(workspaceId, {
         name: name.trim(),
@@ -73,9 +76,35 @@ export function ProjectListPage() {
         startDate: startDate || null,
         dueDate: dueDate || null,
       })
-      navigate(`/projects/${project.id}`)
+      createdProject = project
+      setShowCreate(false)
+      setName('')
+      setDescription('')
+      setNewStatus('PLANNING')
+      setStartDate('')
+      setDueDate('')
+      setSearch('')
+      setStatus('')
+      setArchived(false)
+      setSuccess(`“${project.name}” was created. Refreshing the project list…`)
+      const refreshed = await projectApi.list(workspaceId, {
+        page: 0,
+        size: 10,
+      })
+      setResult(refreshed)
+      setPage(0)
+      if (!refreshed.content.some((item) => item.id === project.id)) {
+        setSuccess('')
+        setError(`The server accepted “${project.name}”, but it was not present when the project list was refreshed.`)
+        return
+      }
+      setSuccess(`“${project.name}” was created and saved.`)
     } catch (requestError) {
-      setError(apiErrorMessage(requestError, 'Project could not be created.'))
+      if (createdProject) {
+        setError(`The project was created, but the list could not be refreshed. ${apiErrorMessage(requestError, 'Try refreshing the page.')}`)
+      } else {
+        setError(apiErrorMessage(requestError, 'Project could not be created.'))
+      }
     } finally {
       setCreating(false)
     }
@@ -115,6 +144,7 @@ export function ProjectListPage() {
         </div>
 
         {error && !showCreate && <p className="form-message form-error" role="alert">{error}</p>}
+        {success && <p className="form-message form-success" role="status">{success}</p>}
 
         <section className="project-filters" aria-label="Project filters">
           <label className="field project-search-field">
