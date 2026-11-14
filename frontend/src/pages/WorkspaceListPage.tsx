@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { FormField } from '../components/FormField'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { WorkspaceHeader } from '../components/WorkspaceHeader'
-import { workspaceApi } from '../services/workspaceService'
+import { requestedWorkspaceSet, workspaceApi } from '../services/workspaceService'
 import type { WorkspaceResponse } from '../types/workspace'
 import { apiErrorMessage } from '../utils/apiError'
 
@@ -17,6 +17,8 @@ export function WorkspaceListPage() {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [creating, setCreating] = useState(false)
+  const [creatingRequestedSet, setCreatingRequestedSet] = useState(false)
+  const [setupMessage, setSetupMessage] = useState('')
 
   useEffect(() => {
     let active = true
@@ -51,6 +53,41 @@ export function WorkspaceListPage() {
     }
   }
 
+  async function createRequestedWorkspaces() {
+    setError('')
+    setSetupMessage('')
+    setCreatingRequestedSet(true)
+    const created: WorkspaceResponse[] = []
+    try {
+      const current = await workspaceApi.list()
+      const existingNames = new Set(current.map((workspace) => workspace.name.trim().toLowerCase()))
+      for (const request of requestedWorkspaceSet) {
+        const key = request.name.toLowerCase()
+        if (existingNames.has(key)) continue
+        const workspace = await workspaceApi.create(request)
+        current.push(workspace)
+        created.push(workspace)
+        existingNames.add(key)
+      }
+      setWorkspaces(current)
+      const skipped = requestedWorkspaceSet.length - created.length
+      setSetupMessage(created.length === 0
+        ? 'All 10 requested workspaces already exist; nothing was duplicated.'
+        : `Created ${created.length} workspace${created.length === 1 ? '' : 's'}; skipped ${skipped} that already existed.`)
+    } catch (requestError) {
+      setWorkspaces((current) => {
+        const names = new Set(current.map((workspace) => workspace.name.trim().toLowerCase()))
+        return [
+          ...created.filter((workspace) => !names.has(workspace.name.trim().toLowerCase())),
+          ...current,
+        ]
+      })
+      setError(`Setup stopped after creating ${created.length} workspace${created.length === 1 ? '' : 's'}. You can retry safely; existing names will be skipped. ${apiErrorMessage(requestError, 'Workspace setup failed.')}`)
+    } finally {
+      setCreatingRequestedSet(false)
+    }
+  }
+
   return (
     <main className="workspace-page">
       <WorkspaceHeader />
@@ -61,12 +98,28 @@ export function WorkspaceListPage() {
             <h1>Workspaces</h1>
             <p>Bring your team together around the work that matters.</p>
           </div>
-          <button className="button-primary" type="button" onClick={() => setShowCreate(true)}>
-            <span aria-hidden="true">＋</span> Create workspace
-          </button>
+          <div className="workspace-heading-actions">
+            <button
+              className="button-primary"
+              type="button"
+              disabled={loading || creatingRequestedSet}
+              onClick={() => setShowCreate(true)}
+            >
+              <span aria-hidden="true">＋</span> Create workspace
+            </button>
+            <button
+              className="button-outline"
+              type="button"
+              disabled={loading || creatingRequestedSet || creating}
+              onClick={createRequestedWorkspaces}
+            >
+              {creatingRequestedSet ? 'Setting up workspaces…' : 'Create my 10 workspaces'}
+            </button>
+          </div>
         </div>
 
         {error && !showCreate && <p className="form-message form-error" role="alert">{error}</p>}
+        {setupMessage && <p className="form-message form-success" role="status">{setupMessage}</p>}
 
         {loading ? (
           <div className="workspace-loading" role="status"><span className="spinner" />Loading workspaces...</div>

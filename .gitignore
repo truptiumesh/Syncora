@@ -46,6 +46,7 @@ var/
 uploads/
 
 # Database backups
+database-backup/
 *.dump
 *.backup
 *.bak

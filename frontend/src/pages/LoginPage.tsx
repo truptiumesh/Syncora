@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { AuthLayout } from '../components/AuthLayout'
 import { FormField } from '../components/FormField'
@@ -9,6 +9,8 @@ import { apiErrorMessage } from '../utils/apiError'
 export function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const sessionExpired = (location.state as { sessionExpired?: boolean } | null)?.sessionExpired === true
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -34,6 +36,11 @@ export function LoginPage() {
         <span className="eyebrow">WELCOME BACK</span>
         <h2>Sign in to Syncora</h2>
         <p className="auth-subtitle">Pick up where your team left off.</p>
+        {sessionExpired && !error && (
+          <p className="form-message form-error" role="status">
+            Your session expired or is no longer valid. Please sign in again to continue.
+          </p>
+        )}
         <form className="auth-form" onSubmit={handleSubmit}>
           <FormField
             id="email"

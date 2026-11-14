@@ -61,11 +61,11 @@ export function AppRoutes() {
 }
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { token } = useAuth()
+  const { token, sessionExpired } = useAuth()
   return token ? (
     <div className="app-shell">
       <AppSidebar />
       <div className="app-shell-content">{children}</div>
     </div>
-  ) : <Navigate to="/login" replace />
+  ) : <Navigate to="/login" replace state={{ sessionExpired }} />
 }

@@ -5,24 +5,28 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from './auth/AuthContext'
 import { WorkspaceDetailsPage } from './pages/WorkspaceDetailsPage'
 import { WorkspaceListPage } from './pages/WorkspaceListPage'
-import { workspaceApi } from './services/workspaceService'
+import { requestedWorkspaceSet, workspaceApi } from './services/workspaceService'
 import { fileApi } from './services/fileService'
 import type { WorkspaceMemberResponse, WorkspaceResponse } from './types/workspace'
 
-vi.mock('./services/workspaceService', () => ({
-  workspaceApi: {
-    list: vi.fn(),
-    get: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    listMembers: vi.fn(),
-    addMember: vi.fn(),
-    updateMemberRole: vi.fn(),
-    removeMember: vi.fn(),
-    leave: vi.fn(),
-  },
-}))
+vi.mock('./services/workspaceService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./services/workspaceService')>()
+  return {
+    ...actual,
+    workspaceApi: {
+      list: vi.fn(),
+      get: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      listMembers: vi.fn(),
+      addMember: vi.fn(),
+      updateMemberRole: vi.fn(),
+      removeMember: vi.fn(),
+      leave: vi.fn(),
+    },
+  }
+})
 
 vi.mock('./services/fileService', () => ({
   fileApi: {
@@ -113,6 +117,33 @@ describe('workspace pages', () => {
       name: 'Design Team',
       description: 'Design work',
     }))
+  })
+
+  it('creates the requested workspace set and skips existing names', async () => {
+    const user = userEvent.setup()
+    const existing = { ...workspace, name: requestedWorkspaceSet[0].name }
+    const createdNames: string[] = []
+    vi.mocked(workspaceApi.list).mockResolvedValue([existing])
+    vi.mocked(workspaceApi.create).mockImplementation(async (request) => {
+      createdNames.push(request.name)
+      return {
+        ...workspace,
+        id: `created-${createdNames.length}`,
+        name: request.name,
+        description: request.description,
+      }
+    })
+    renderWorkspacePage()
+
+    await screen.findByRole('heading', { name: existing.name })
+    await user.click(screen.getByRole('button', { name: 'Create my 10 workspaces' }))
+
+    for (const item of requestedWorkspaceSet) {
+      expect(await screen.findByRole('heading', { name: item.name })).toBeInTheDocument()
+    }
+    expect(workspaceApi.create).toHaveBeenCalledTimes(9)
+    expect(createdNames).not.toContain(existing.name)
+    expect(screen.getByRole('status')).toHaveTextContent('Created 9 workspaces; skipped 1 that already existed.')
   })
 
   it('shows an empty state when the user has no workspaces', async () => {

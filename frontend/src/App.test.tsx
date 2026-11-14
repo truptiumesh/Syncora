@@ -1,10 +1,11 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { AxiosError } from 'axios'
 import { MemoryRouter } from 'react-router-dom'
 import { AppRoutes } from './App'
 import { AuthProvider } from './auth/AuthContext'
-import { setAccessToken } from './api/http'
+import { http, setAccessToken } from './api/http'
 import { authApi } from './services/authService'
 import { notificationApi } from './services/notificationService'
 import type { AuthResponse, UserResponse } from './types/auth'
@@ -162,6 +163,41 @@ describe('authentication pages and routes', () => {
 
     expect(await screen.findByRole('heading', { name: 'Sign in to Syncora' })).toBeInTheDocument()
     expect(authApi.getCurrentUser).not.toHaveBeenCalled()
+  })
+
+  it('clears an invalid session and guides the user back to sign in', async () => {
+    const user = userEvent.setup()
+    renderRoutes()
+    await user.type(screen.getByLabelText('Email address'), 'test@example.com')
+    await user.type(screen.getByLabelText('Password'), 'StrongPassword123')
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(await screen.findByRole('heading', { name: /good (morning|afternoon|evening), test/i })).toBeInTheDocument()
+
+    const originalAdapter = http.defaults.adapter
+    http.defaults.adapter = async (config) => {
+      throw new AxiosError('Unauthorized', 'ERR_BAD_REQUEST', config, undefined, {
+        data: {},
+        status: 401,
+        statusText: 'Unauthorized',
+        headers: {},
+        config,
+      })
+    }
+
+    try {
+      await act(async () => {
+        await expect(http.get('/api/v1/workspaces')).rejects.toMatchObject({
+          response: { status: 401 },
+        })
+      })
+      expect(await screen.findByRole('heading', { name: 'Sign in to Syncora' })).toBeInTheDocument()
+      expect(await screen.findByRole('status')).toHaveTextContent(
+        'Your session expired or is no longer valid. Please sign in again to continue.',
+      )
+    } finally {
+      http.defaults.adapter = originalAdapter
+      setAccessToken(null)
+    }
   })
 
   it('shows a loading state while login is in progress', async () => {

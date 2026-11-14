@@ -52,8 +52,11 @@ class AuthenticationIntegrationTests {
 	}
 
 	@Test
-	void corsAllowsBothLocalViteHostnamesAndRejectsUnconfiguredOrigins() throws Exception {
-		for (String origin : new String[] {"http://localhost:5173", "http://127.0.0.1:5173"}) {
+	void corsAllowsLocalAndProductionOriginsAndRejectsUnconfiguredOrigins() throws Exception {
+		for (String origin : new String[] {
+				"http://localhost:5173",
+				"http://127.0.0.1:5173",
+				"https://syncora-frontend.vercel.app"}) {
 			for (String method : new String[] {"POST", "PATCH"}) {
 				mockMvc.perform(options("/api/v1/auth/login")
 								.header("Origin", origin)

@@ -8,6 +8,49 @@ import type {
   WorkspaceRole,
 } from '../types/workspace'
 
+export const requestedWorkspaceSet: CreateWorkspaceRequest[] = [
+  {
+    name: 'Engineering & Development',
+    description: 'Manage software development activities, technical projects, sprint planning, bug tracking, and product releases.',
+  },
+  {
+    name: 'Marketing & Growth',
+    description: 'Plan marketing campaigns, manage social media activities, track leads, and improve brand awareness.',
+  },
+  {
+    name: 'Human Resources',
+    description: 'Manage recruitment, employee onboarding, training programs, and internal HR activities.',
+  },
+  {
+    name: 'Product Management',
+    description: 'Organize product roadmaps, feature planning, user feedback, and product development priorities.',
+  },
+  {
+    name: 'Sales & Business Development',
+    description: 'Track sales opportunities, manage client relationships, monitor business growth, and coordinate sales activities.',
+  },
+  {
+    name: 'Design & Creative',
+    description: 'Collaborate on UI/UX designs, branding, creative assets, and design review processes.',
+  },
+  {
+    name: 'Customer Support',
+    description: 'Manage customer inquiries, support tickets, issue resolution, and customer satisfaction initiatives.',
+  },
+  {
+    name: 'Finance & Operations',
+    description: 'Coordinate budgeting, financial reporting, expense tracking, and operational activities.',
+  },
+  {
+    name: 'Research & Innovation',
+    description: 'Organize research initiatives, experiments, technical investigations, and innovation projects.',
+  },
+  {
+    name: 'IT & Infrastructure',
+    description: 'Manage IT infrastructure, system maintenance, security improvements, and technical support operations.',
+  },
+]
+
 export const workspaceApi = {
   async list() {
     const response = await http.get<WorkspaceResponse[]>('/api/v1/workspaces')
